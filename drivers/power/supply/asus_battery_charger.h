@@ -55,6 +55,7 @@ struct asus_battery_chg {
 	struct delayed_work		jeita_cc_work;
 	struct delayed_work		full_cap_monitor_work;
 	struct delayed_work		battery_safety_work;
+	bool		charging_suspend;
 };
 
 int asus_battery_charger_init(struct asus_battery_chg *abc);
