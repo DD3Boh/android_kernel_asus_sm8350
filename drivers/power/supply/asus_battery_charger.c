@@ -576,6 +576,31 @@ static ssize_t charging_suspend_show(struct class *c,
 }
 static CLASS_ATTR_RW(charging_suspend);
 
+static ssize_t workaround_18w_charging_store(struct class *c,
+			struct class_attribute *attr,
+			const char *buf, size_t count)
+{
+	u32 tmp;
+
+	sscanf(buf, "%d", &tmp);
+	ChgPD_Info.slow_chglimit = tmp;
+
+	if(asus_usb_online){
+		cancel_delayed_work_sync(&asus_slow_charging_work);
+		schedule_delayed_work(&asus_slow_charging_work, 0 * HZ);
+		__pm_wakeup_event(slowchg_ws, 60 * 1000);
+	}
+
+	return count;
+}
+
+static ssize_t workaround_18w_charging_show(struct class *c,
+			struct class_attribute *attr, char *buf)
+{
+	return scnprintf(buf, PAGE_SIZE, "%d\n", ChgPD_Info.slow_chglimit);
+}
+static CLASS_ATTR_RW(smartchg_slow_charging);
+
 static void update_safety_data(struct asus_battery_chg *abc)
 {
 	struct device *dev = battery_chg_device(abc->bcdev);
