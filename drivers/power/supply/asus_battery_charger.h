@@ -47,12 +47,13 @@ struct asus_battery_chg {
 	int				thermal_threshold;
 	struct delayed_work		panel_check_work;
 	struct delayed_work		charger_mode_work;
+	struct delayed_work		workaround_18w_work;
 	struct delayed_work		thermal_policy_work;
 	int				jeita_cc_state;
 	struct delayed_work		jeita_rule_work;
 	struct delayed_work		jeita_prechg_work;
 	struct delayed_work		jeita_cc_work;
-	struct delayed_work		charging_monitor_work;
+	struct delayed_work		full_cap_monitor_work;
 	struct delayed_work		battery_safety_work;
 	bool		charging_suspend;
 	bool		charging_18w;

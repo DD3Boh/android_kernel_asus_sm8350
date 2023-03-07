@@ -226,6 +226,21 @@ static void panel_check_worker(struct work_struct *work)
 	schedule_delayed_work(&abc->panel_check_work, 10 * HZ);
 }
 
+static void workaround_18w_worker(struct work_struct *work)
+{
+	struct asus_battery_chg *abc = dwork_to_abc(work, workaround_18w_work);
+
+	pr_err("workaround_18w_worker\n");
+	if (abc->charging_18w) {
+		pr_err("charging_18w = true\n");
+		write_property_work_event(abc, WORK_18W_WORKAROUND);
+		schedule_delayed_work(&abc->workaround_18w_work, 26 * HZ);
+	} else {
+		pr_err("charging_18w = false\n");
+		cancel_delayed_work_sync(&abc->workaround_18w_work);
+	}
+}
+
 static void thermal_policy_worker(struct work_struct *work)
 {
 	struct asus_battery_chg *abc = dwork_to_abc(work, thermal_policy_work);
@@ -272,20 +287,13 @@ static void jeita_cc_worker(struct work_struct *work)
 	schedule_delayed_work(&abc->jeita_cc_work, 5 * HZ);
 }
 
-static void charging_monitor_worker(struct work_struct *work)
+static void full_cap_monitor_worker(struct work_struct *work)
 {
-	struct asus_battery_chg *abc = dwork_to_abc(work, charging_monitor_work);
+	struct asus_battery_chg *abc = dwork_to_abc(work, full_cap_monitor_work);
 
-	pr_err("charging_monitor_worker\n");
-	if (abc->charging_18w) {
-		pr_err("charging_18w = true\n");
-		write_property_work_event(abc, WORK_18W_WORKAROUND);
-	} else {
-		pr_err("charging_18w = false\n");
-		write_property_work_event(abc, WORK_LONG_FULL_CAP);
-	}
+	write_property_work_event(abc, WORK_LONG_FULL_CAP);
 
-	schedule_delayed_work(&abc->charging_monitor_work, 30 * HZ);
+	schedule_delayed_work(&abc->full_cap_monitor_work, 30 * HZ);
 }
 
 extern bool g_Charger_mode;
@@ -579,6 +587,8 @@ static ssize_t charging_18w_store(struct class *c,
 	struct asus_battery_chg *abc = container_of(c, struct asus_battery_chg, asuslib_class);
 
 	abc->charging_18w = simple_strtol(buf, NULL, 10);
+
+	schedule_delayed_work(&abc->workaround_18w_work, 0);
 
 	return count;
 }
@@ -978,13 +988,14 @@ int asus_battery_charger_init(struct asus_battery_chg *abc)
 	INIT_DELAYED_WORK(&abc->usb_thermal_work, usb_thermal_worker);
 	schedule_delayed_work(&abc->usb_thermal_work, 0);
 
-	INIT_DELAYED_WORK(&abc->charging_monitor_work, charging_monitor_worker);
-	schedule_delayed_work(&abc->charging_monitor_work, 0);
+	INIT_DELAYED_WORK(&abc->full_cap_monitor_work, full_cap_monitor_worker);
+	schedule_delayed_work(&abc->full_cap_monitor_work, 0);
 
 	INIT_DELAYED_WORK(&abc->charger_mode_work, charger_mode_worker);
 	schedule_delayed_work(&abc->charger_mode_work, 0);
 
 	INIT_DELAYED_WORK(&abc->panel_check_work, panel_check_worker);
+	INIT_DELAYED_WORK(&abc->workaround_18w_work, workaround_18w_worker);
 	INIT_DELAYED_WORK(&abc->thermal_policy_work, thermal_policy_worker);
 	INIT_DELAYED_WORK(&abc->jeita_rule_work, jeita_rule_worker);
 	INIT_DELAYED_WORK(&abc->jeita_prechg_work, jeita_prechg_worker);
@@ -1003,9 +1014,10 @@ int asus_battery_charger_init(struct asus_battery_chg *abc)
 int asus_battery_charger_deinit(struct asus_battery_chg *abc)
 {
 	cancel_delayed_work_sync(&abc->usb_thermal_work);
-	cancel_delayed_work_sync(&abc->charging_monitor_work);
+	cancel_delayed_work_sync(&abc->full_cap_monitor_work);
 	cancel_delayed_work_sync(&abc->charger_mode_work);
 	cancel_delayed_work_sync(&abc->panel_check_work);
+	cancel_delayed_work_sync(&abc->workaround_18w_work);
 	cancel_delayed_work_sync(&abc->thermal_policy_work);
 	cancel_delayed_work_sync(&abc->jeita_rule_work);
 	cancel_delayed_work_sync(&abc->jeita_prechg_work);
