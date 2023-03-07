@@ -136,9 +136,6 @@ static int handle_usb_online(struct notifier_block *nb, unsigned long status,
 			schedule_delayed_work(&abc->panel_check_work, 62 * HZ);
 		}
 
-		cancel_delayed_work_sync(&abc->workaround_18w_work);
-		schedule_delayed_work(&abc->workaround_18w_work, 26 * HZ);
-
 		cancel_delayed_work_sync(&abc->thermal_policy_work);
 		schedule_delayed_work(&abc->thermal_policy_work, 68 * HZ);
 
@@ -146,7 +143,6 @@ static int handle_usb_online(struct notifier_block *nb, unsigned long status,
 	} else {
 		cancel_delayed_work_sync(&abc->jeita_rule_work);
 		cancel_delayed_work_sync(&abc->panel_check_work);
-		cancel_delayed_work_sync(&abc->workaround_18w_work);
 		cancel_delayed_work_sync(&abc->thermal_policy_work);
 		cancel_delayed_work_sync(&abc->jeita_prechg_work);
 		cancel_delayed_work_sync(&abc->jeita_cc_work);
@@ -234,7 +230,15 @@ static void workaround_18w_worker(struct work_struct *work)
 {
 	struct asus_battery_chg *abc = dwork_to_abc(work, workaround_18w_work);
 
-	write_property_work_event(abc, WORK_18W_WORKAROUND);
+	pr_err("workaround_18w_worker\n");
+	if (abc->charging_18w) {
+		pr_err("charging_18w = true\n");
+		write_property_work_event(abc, WORK_18W_WORKAROUND);
+		schedule_delayed_work(&abc->workaround_18w_work, 26 * HZ);
+	} else {
+		pr_err("charging_18w = false\n");
+		cancel_delayed_work_sync(&abc->workaround_18w_work);
+	}
 }
 
 static void thermal_policy_worker(struct work_struct *work)
@@ -576,30 +580,27 @@ static ssize_t charging_suspend_show(struct class *c,
 }
 static CLASS_ATTR_RW(charging_suspend);
 
-static ssize_t workaround_18w_charging_store(struct class *c,
+static ssize_t charging_18w_store(struct class *c,
 			struct class_attribute *attr,
 			const char *buf, size_t count)
 {
-	u32 tmp;
+	struct asus_battery_chg *abc = container_of(c, struct asus_battery_chg, asuslib_class);
 
-	sscanf(buf, "%d", &tmp);
-	ChgPD_Info.slow_chglimit = tmp;
+	abc->charging_18w = simple_strtol(buf, NULL, 10);
 
-	if(asus_usb_online){
-		cancel_delayed_work_sync(&asus_slow_charging_work);
-		schedule_delayed_work(&asus_slow_charging_work, 0 * HZ);
-		__pm_wakeup_event(slowchg_ws, 60 * 1000);
-	}
+	schedule_delayed_work(&abc->workaround_18w_work, 0);
 
 	return count;
 }
 
-static ssize_t workaround_18w_charging_show(struct class *c,
+static ssize_t charging_18w_show(struct class *c,
 			struct class_attribute *attr, char *buf)
 {
-	return scnprintf(buf, PAGE_SIZE, "%d\n", ChgPD_Info.slow_chglimit);
+	struct asus_battery_chg *abc = container_of(c, struct asus_battery_chg, asuslib_class);
+
+	return scnprintf(buf, PAGE_SIZE, "%d\n", abc->charging_18w);
 }
-static CLASS_ATTR_RW(smartchg_slow_charging);
+static CLASS_ATTR_RW(charging_18w);
 
 static void update_safety_data(struct asus_battery_chg *abc)
 {
@@ -856,6 +857,7 @@ static ssize_t set_virtualthermal_store(struct class *c,
 static CLASS_ATTR_WO(set_virtualthermal);
 
 static struct attribute *asuslib_class_attrs[] = {
+	&class_attr_charging_18w.attr,
 	&class_attr_charging_suspend.attr,
 	&class_attr_set_virtualthermal.attr,
 	NULL,
