@@ -1839,6 +1839,13 @@ csr_check_band_freq_match(enum band_info band, uint32_t freq)
 	if (band == BAND_5G && WLAN_REG_IS_5GHZ_CH_FREQ(freq))
 		return true;
 
+	/*
+	 * Not adding the band check for now as band_info will be soon
+	 * replaced with reg_wifi_band enum
+	 */
+	if (WLAN_REG_IS_6GHZ_CHAN_FREQ(freq))
+		return true;
+
 	return false;
 }
 
@@ -14951,7 +14958,7 @@ csr_update_sae_single_pmk_ap_cap(struct mac_context *mac,
 }
 #endif
 
-static void csr_get_basic_rates(tSirMacRateSet *b_rates, uint32_t chan_freq)
+void csr_get_basic_rates(tSirMacRateSet *b_rates, uint32_t chan_freq)
 {
 	/*
 	 * Some IOT APs don't send supported rates in
@@ -21299,10 +21306,19 @@ csr_process_roam_sync_callback(struct mac_context *mac_ctx,
 		 * the candidate was not successful.
 		 * Connection to the previous AP is still valid in this
 		 * case. So move to RSO_ENABLED state.
+		 *
+		 * Switch to RSO enabled state only if the current state is
+		 * WLAN_ROAMING_IN_PROG or WLAN_ROAM_SYNCH_IN_PROG.
+		 * This API can be called in internal roam aborts also when
+		 * RSO state is deinit and cause RSO start to be sent in
+		 * disconnected state.
 		 */
-		csr_post_roam_state_change(mac_ctx, session_id,
-					   WLAN_ROAM_RSO_ENABLED,
-					   REASON_ROAM_ABORT);
+		if (MLME_IS_ROAMING_IN_PROG(mac_ctx->psoc, session_id) ||
+		    MLME_IS_ROAM_SYNCH_IN_PROGRESS(mac_ctx->psoc, session_id))
+			csr_post_roam_state_change(mac_ctx, session_id,
+						   WLAN_ROAM_RSO_ENABLED,
+						   REASON_ROAM_ABORT);
+
 		csr_roam_roaming_offload_timer_action(mac_ctx,
 				0, session_id, ROAMING_OFFLOAD_TIMER_STOP);
 		csr_roam_call_callback(mac_ctx, session_id, NULL, 0,
